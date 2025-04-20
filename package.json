@@ -1,0 +1,11 @@
+{
+  "name": "caesar-cipher-cli-tool",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:Voris03/caesar-cipher-cli-tool.git",
+  "author": "Voris03 <v.vidus03@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0"
+  }
+}
