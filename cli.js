@@ -2,75 +2,91 @@
 import { Command } from 'commander';
 import fs from 'fs';
 import { pipeline } from 'stream/promises';
-import task1Transform from './transforms/task1Transform.js';
 import readline from 'readline';
+import { Writable, Readable } from 'stream';
+
+import task1Transform from './transforms/task1Transform.js';
+import taskArrayDiffTransform from './transforms/taskArrayDiffTransform.js';
 
 const program = new Command();
 
 program
-  .requiredOption('-t, --task <number>', 'номер задачи (только 1 реализован)')
-  .option('-i, --input <path>', 'входной файл')
-  .option('-o, --output <path>', 'выходной файл');
+  .requiredOption('-t, --task <number>', 'Номер задачи для выполнения')
+  .option('-i, --input <path>', 'Путь к входному файлу')
+  .option('-o, --output <path>', 'Путь к выходному файлу');
 
 program.parse(process.argv);
 const options = program.opts();
 
-// ---------- ВЫБОР ЗАДАЧИ ----------
+// ------------------ Выбор задачи ------------------
 let transform;
-if (options.task === '1') {
-  transform = task1Transform();
-} else {
-  console.error('❌ Поддерживается только задача 1 (номер телефона)');
-  process.exit(1);
+
+switch (options.task) {
+  case '1':
+    transform = task1Transform();
+    break;
+  case '100':
+    transform = taskArrayDiffTransform();
+    break;
+  default:
+    console.error(`❌ Задача с номером ${options.task} не реализована`);
+    process.exit(1);
 }
 
-// ---------- ВХОД ----------
+// ------------------ Потоки ------------------
 
 function getInputStream(path) {
   if (!fs.existsSync(path) || fs.lstatSync(path).isDirectory()) {
-    console.error(`❌ Файл "${path}" не найден или это директория`);
+    console.error(`❌ Ошибка: Файл "${path}" не существует или это директория`);
     process.exit(1);
   }
   return fs.createReadStream(path, 'utf-8');
 }
 
-// ---------- ВЫХОД ----------
-
 function getOutputStream(path) {
   try {
     return fs.createWriteStream(path, { flags: 'a' });
   } catch (err) {
-    console.error(`❌ Невозможно записать в "${path}": ${err.message}`);
+    console.error(`❌ Ошибка записи в файл "${path}": ${err.message}`);
     process.exit(1);
   }
 }
 
-// ---------- ФАЙЛОВЫЙ РЕЖИМ ----------
+// ------------------ REPL-safe stdout ------------------
+const safeStdout = new Writable({
+  write(chunk, encoding, callback) {
+    process.stdout.write(chunk, encoding, callback);
+  }
+});
+
+// ------------------ Режим: Чтение из файла ------------------
+
 if (options.input) {
   const input = getInputStream(options.input);
   const output = options.output ? getOutputStream(options.output) : process.stdout;
 
   pipeline(input, transform, output)
-    .then(() => console.log('✅ Задача выполнена'))
+    .then(() => console.log('✅ Задача успешно выполнена'))
     .catch(err => {
       console.error('❌ Ошибка обработки:', err.message);
       process.exit(1);
     });
 }
 
-// ---------- REPL РЕЖИМ ----------
+// ------------------ Режим: stdin (REPL) ------------------
+
 else {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: 'Введи массив чисел: '
+    prompt: 'Ввод: '
   });
 
   rl.prompt();
 
   rl.on('line', async (line) => {
-    const inputStream = ReadableFromString(line);
-    const output = options.output ? getOutputStream(options.output) : process.stdout;
+    const inputStream = Readable.from([line]);
+    const output = options.output ? getOutputStream(options.output) : safeStdout;
 
     try {
       await pipeline(inputStream, transform, output);
@@ -85,10 +101,4 @@ else {
     console.log('👋 Завершение работы');
     process.exit(0);
   });
-}
-
-// ---------- Вспомогательная функция ----------
-import { Readable } from 'stream';
-function ReadableFromString(str) {
-  return Readable.from([str]);
 }
