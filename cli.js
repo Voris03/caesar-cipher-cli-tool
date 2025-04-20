@@ -1,68 +1,94 @@
 // cli.js
 import { Command } from 'commander';
 import fs from 'fs';
-import { pipeline } from 'stream';
-import { promisify } from 'util';
-import { createInterface } from 'readline';
-
+import { pipeline } from 'stream/promises';
 import task1Transform from './transforms/task1Transform.js';
-import task5Transform from './transforms/task5Transform.js';
+import readline from 'readline';
 
 const program = new Command();
-const pipe = promisify(pipeline);
 
 program
-  .requiredOption('-t, --task <number>', 'номер задачи для выполнения')
-  .option('-i, --input <file>', 'входной файл')
-  .option('-o, --output <file>', 'выходной файл');
+  .requiredOption('-t, --task <number>', 'номер задачи (только 1 реализован)')
+  .option('-i, --input <path>', 'входной файл')
+  .option('-o, --output <path>', 'выходной файл');
 
 program.parse(process.argv);
 const options = program.opts();
 
-// ---------- Ввод и вывод ----------
-const inputStream = options.input
-  ? getInputStream(options.input)
-  : process.stdin;
+// ---------- ВЫБОР ЗАДАЧИ ----------
+let transform;
+if (options.task === '1') {
+  transform = task1Transform();
+} else {
+  console.error('❌ Поддерживается только задача 1 (номер телефона)');
+  process.exit(1);
+}
 
-const outputStream = options.output
-  ? getOutputStream(options.output)
-  : process.stdout;
+// ---------- ВХОД ----------
 
 function getInputStream(path) {
   if (!fs.existsSync(path) || fs.lstatSync(path).isDirectory()) {
-    console.error('❌ Ошибка: Входной файл не существует или это директория');
+    console.error(`❌ Файл "${path}" не найден или это директория`);
     process.exit(1);
   }
   return fs.createReadStream(path, 'utf-8');
 }
 
+// ---------- ВЫХОД ----------
+
 function getOutputStream(path) {
   try {
     return fs.createWriteStream(path, { flags: 'a' });
-  } catch (e) {
-    console.error('❌ Ошибка: Невозможно записать в выходной файл');
+  } catch (err) {
+    console.error(`❌ Невозможно записать в "${path}": ${err.message}`);
     process.exit(1);
   }
 }
 
-// ---------- Выбор задачи ----------
-let transform;
-switch (options.task) {
-  case '1':
-    transform = task1Transform();
-    break;
-  case '5':
-    transform = task5Transform();
-    break;
-  default:
-    console.error('❌ Ошибка: Задача не найдена');
-    process.exit(1);
+// ---------- ФАЙЛОВЫЙ РЕЖИМ ----------
+if (options.input) {
+  const input = getInputStream(options.input);
+  const output = options.output ? getOutputStream(options.output) : process.stdout;
+
+  pipeline(input, transform, output)
+    .then(() => console.log('✅ Задача выполнена'))
+    .catch(err => {
+      console.error('❌ Ошибка обработки:', err.message);
+      process.exit(1);
+    });
 }
 
-// ---------- PIPELINE ----------
-await pipe(inputStream, transform, outputStream)
-  .then(() => console.log('✅ Задача выполнена'))
-  .catch((err) => {
-    console.error('❌ Ошибка в pipeline:', err.message);
-    process.exit(1);
+// ---------- REPL РЕЖИМ ----------
+else {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: 'Введи массив чисел: '
   });
+
+  rl.prompt();
+
+  rl.on('line', async (line) => {
+    const inputStream = ReadableFromString(line);
+    const output = options.output ? getOutputStream(options.output) : process.stdout;
+
+    try {
+      await pipeline(inputStream, transform, output);
+    } catch (err) {
+      console.error('❌ Ошибка обработки:', err.message);
+    }
+
+    rl.prompt();
+  });
+
+  rl.on('close', () => {
+    console.log('👋 Завершение работы');
+    process.exit(0);
+  });
+}
+
+// ---------- Вспомогательная функция ----------
+import { Readable } from 'stream';
+function ReadableFromString(str) {
+  return Readable.from([str]);
+}

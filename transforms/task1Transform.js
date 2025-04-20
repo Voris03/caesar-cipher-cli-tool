@@ -1,4 +1,3 @@
-// transforms/task1Transform.js
 import { Transform } from 'stream';
 
 function createPhoneNumber(numbers) {
@@ -8,9 +7,6 @@ function createPhoneNumber(numbers) {
 
 export default function task1Transform() {
   return new Transform({
-    readableObjectMode: false,
-    writableObjectMode: false,
-
     transform(chunk, encoding, callback) {
       try {
         const input = chunk.toString().trim();
@@ -23,7 +19,7 @@ export default function task1Transform() {
         const result = createPhoneNumber(arr);
         callback(null, result + '\n');
       } catch (err) {
-        callback(new Error('Ошибка обработки input в task1: ' + err.message));
+        callback(new Error('Ошибка: ' + err.message));
       }
     }
   });
